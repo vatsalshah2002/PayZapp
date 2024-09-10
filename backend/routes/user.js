@@ -1,6 +1,6 @@
 const express = require('express');
 const zod = require("zod");
-const { User } = require("../db");
+const { User, Account} = require("../db");
 const jwt = require("jsonwebtoken");
 const { JWT_SECRET } = require("../config");
 const  { authMiddleware } = require("../middleware");
@@ -11,17 +11,20 @@ const router = express.Router();
 const signupSchema = zod.object({
     username:zod.string(),
     password:zod.string(),
-    firstname:zod.string(),
-    lastname:zod.string()
+    firstName:zod.string(),
+    lastName:zod.string()
 })
 
 router.post("/signup",async(req,res)=>{
     const body = req.body;
     
-    const { success } = signupSchema.safeParse(req.body);
+    const { success,error } = signupSchema.safeParse(req.body);
     if (!success) {
-        return res.status(411).json({
-            message: "Email already taken / Incorrect inputs"
+        return res.status(400).json({
+            message: "Email already taken  Incorrect inputs",
+            details: error.issues 
+            
+
         })
     }
 
@@ -43,6 +46,11 @@ router.post("/signup",async(req,res)=>{
     })
     const userId = user._id;
 
+    await Account.create({
+        userId,
+        balance: 1 + Math.random() * 10000
+    })
+
     const token = jwt.sign({
         userId
     }, JWT_SECRET);
@@ -52,6 +60,42 @@ router.post("/signup",async(req,res)=>{
         token: token
     })
 
+})
+
+const signinBody = zod.object({
+    username: zod.string().email(),
+	password: zod.string()
+})
+
+router.post("/signin", async (req, res) => {
+    const { success , error } = signinBody.safeParse(req.body)
+    if (!success) {
+        return res.status(411).json({
+            message: "Incorrect inputs",
+            details: error.issues 
+        })
+    }
+
+    const user = await User.findOne({
+        username: req.body.username,
+        password: req.body.password
+    });
+
+    if (user) {
+        const token = jwt.sign({
+            userId: user._id
+        }, JWT_SECRET);
+  
+        res.json({
+            token: token
+        })
+        return;
+    }
+
+    
+    res.status(411).json({
+        message: "Error while logging in"
+    })
 })
 
 const updateBody = zod.object({
